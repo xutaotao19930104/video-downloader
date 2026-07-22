@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   video-downloader:
     build: .
@@ -9,7 +7,7 @@ services:
       - "8080:8080"
     volumes:
       - ./config:/data/config
-      - /volume1/downloads/videos:/data/downloads
+      - /vol1/downloads/videos:/data/downloads
       - ./logs:/data/logs
     environment:
       - TZ=Asia/Shanghai

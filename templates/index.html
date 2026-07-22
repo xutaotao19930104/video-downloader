@@ -19,7 +19,6 @@
         .btn-danger { background: #ff4d4f; color: white; }
         .btn-success { background: #52c41a; color: white; }
         .btn-warning { background: #faad14; color: white; }
-        .btn-default { background: #f0f0f0; color: #333; }
         .task-item { border: 1px solid #eee; border-radius: 4px; padding: 15px; margin-bottom: 10px; }
         .task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .task-status { padding: 4px 8px; border-radius: 4px; font-size: 12px; }
@@ -32,25 +31,25 @@
         .progress-fill { height: 100%; background: #1890ff; transition: width 0.3s; }
         .task-info { font-size: 13px; color: #666; margin-top: 5px; }
         .empty { text-align: center; color: #999; padding: 20px; }
+        .tip { background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 4px; padding: 10px; margin-bottom: 15px; font-size: 13px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>视频下载器</h1>
+        <h1>视频下载器 (yt-dlp)</h1>
 
         <div class="card">
+            <div class="tip">
+                支持 B站、抖音、YouTube、爱奇艺、腾讯视频、优酷等几千个网站，直接粘贴视频页面链接即可。
+            </div>
             <h2 style="margin-bottom: 15px;">添加下载任务</h2>
             <form id="addTaskForm">
                 <div class="form-group">
-                    <label>m3u8 地址</label>
-                    <textarea id="m3u8Url" placeholder="https://example.com/video/index.m3u8" required></textarea>
+                    <label>视频链接</label>
+                    <textarea id="videoUrl" placeholder="粘贴视频页面链接，例如：&#10;https://www.bilibili.com/video/BV1xx411c7mD&#10;https://www.youtube.com/watch?v=xxx" required></textarea>
                 </div>
                 <div class="form-group">
-                    <label>视频标题</label>
-                    <input type="text" id="title" placeholder="泽塔奥特曼 国语版 - 第01集" required>
-                </div>
-                <div class="form-group">
-                    <label>保存目录 (可选，默认: /data/downloads/标题)</label>
+                    <label>保存目录 (可选，默认: /data/downloads)</label>
                     <input type="text" id="outputDir" placeholder="/data/downloads/泽塔奥特曼">
                 </div>
                 <button type="submit" class="btn-primary">开始下载</button>
@@ -83,20 +82,20 @@
             container.innerHTML = tasks.map(task => `
                 <div class="task-item">
                     <div class="task-header">
-                        <strong>${task.title}</strong>
+                        <strong>${task.title || task.filename || '下载中...'}</strong>
                         <span class="task-status status-${task.status}">${statusText(task.status)}</span>
                     </div>
-                    ${task.total > 0 ? `
+                    ${task.status === 'downloading' ? `
                     <div class="progress-bar">
                         <div class="progress-fill" style="width:${task.progress || 0}%"></div>
                     </div>
-                    <div class="task-info">
-                        ${task.downloaded || 0}/${task.total} 片段 | 
-                        ${formatSize(task.total_size || 0)} | 
-                        失败: ${task.failed || 0}
-                    </div>
+                    <div class="task-info">进度: ${task.progress || 0}%</div>
                     ` : ''}
                     ${task.error ? `<div class="task-info" style="color:#ff4d4f">${task.error}</div>` : ''}
+                    ${task.filename ? `<div class="task-info">文件: ${task.filename}</div>` : ''}
+                    <div style="margin-top: 10px; font-size: 12px; color: #999;">
+                        ${task.url}
+                    </div>
                     <div style="margin-top: 10px;">
                         ${task.status === 'pending' || task.status === 'downloading' ? 
                             `<button class="btn-warning" onclick="cancelTask('${task.id}')">取消</button>` : ''}
@@ -113,21 +112,13 @@
             return m[s] || s;
         }
 
-        function formatSize(bytes) {
-            if (bytes >= 1024*1024*1024) return (bytes/1024/1024/1024).toFixed(2) + ' GB';
-            if (bytes >= 1024*1024) return (bytes/1024/1024).toFixed(1) + ' MB';
-            if (bytes >= 1024) return (bytes/1024).toFixed(1) + ' KB';
-            return bytes + ' B';
-        }
-
         document.getElementById('addTaskForm').onsubmit = async (e) => {
             e.preventDefault();
             await fetch('/api/tasks', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    m3u8_url: document.getElementById('m3u8Url').value,
-                    title: document.getElementById('title').value,
+                    url: document.getElementById('videoUrl').value,
                     output_dir: document.getElementById('outputDir').value
                 })
             });
