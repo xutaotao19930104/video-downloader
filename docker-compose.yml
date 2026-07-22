@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  video-downloader:
+    build: .
+    container_name: video-downloader
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/data/config
+      - /volume1/downloads/videos:/data/downloads
+      - ./logs:/data/logs
+    environment:
+      - TZ=Asia/Shanghai

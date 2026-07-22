@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频下载器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { margin-bottom: 20px; color: #333; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 500; }
+        input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        textarea { height: 80px; resize: vertical; }
+        button { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 8px; }
+        .btn-primary { background: #1890ff; color: white; }
+        .btn-danger { background: #ff4d4f; color: white; }
+        .btn-success { background: #52c41a; color: white; }
+        .btn-warning { background: #faad14; color: white; }
+        .btn-default { background: #f0f0f0; color: #333; }
+        .task-item { border: 1px solid #eee; border-radius: 4px; padding: 15px; margin-bottom: 10px; }
+        .task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .task-status { padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        .status-pending { background: #f0f0f0; color: #666; }
+        .status-downloading { background: #e6f7ff; color: #1890ff; }
+        .status-completed { background: #f6ffed; color: #52c41a; }
+        .status-failed { background: #fff2f0; color: #ff4d4f; }
+        .status-cancelled { background: #fffbe6; color: #faad14; }
+        .progress-bar { height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden; margin-top: 10px; }
+        .progress-fill { height: 100%; background: #1890ff; transition: width 0.3s; }
+        .task-info { font-size: 13px; color: #666; margin-top: 5px; }
+        .empty { text-align: center; color: #999; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>视频下载器</h1>
+
+        <div class="card">
+            <h2 style="margin-bottom: 15px;">添加下载任务</h2>
+            <form id="addTaskForm">
+                <div class="form-group">
+                    <label>m3u8 地址</label>
+                    <textarea id="m3u8Url" placeholder="https://example.com/video/index.m3u8" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>视频标题</label>
+                    <input type="text" id="title" placeholder="泽塔奥特曼 国语版 - 第01集" required>
+                </div>
+                <div class="form-group">
+                    <label>保存目录 (可选，默认: /data/downloads/标题)</label>
+                    <input type="text" id="outputDir" placeholder="/data/downloads/泽塔奥特曼">
+                </div>
+                <button type="submit" class="btn-primary">开始下载</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom: 15px;">任务列表</h2>
+            <div id="taskList"><div class="empty">暂无任务</div></div>
+        </div>
+    </div>
+
+    <script>
+        async function loadTasks() {
+            try {
+                const res = await fetch('/api/tasks');
+                const data = await res.json();
+                renderTasks(data.tasks);
+            } catch (e) {
+                console.error('加载任务失败:', e);
+            }
+        }
+
+        function renderTasks(tasks) {
+            const container = document.getElementById('taskList');
+            if (!tasks || !tasks.length) {
+                container.innerHTML = '<div class="empty">暂无任务</div>';
+                return;
+            }
+            container.innerHTML = tasks.map(task => `
+                <div class="task-item">
+                    <div class="task-header">
+                        <strong>${task.title}</strong>
+                        <span class="task-status status-${task.status}">${statusText(task.status)}</span>
+                    </div>
+                    ${task.total > 0 ? `
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width:${task.progress || 0}%"></div>
+                    </div>
+                    <div class="task-info">
+                        ${task.downloaded || 0}/${task.total} 片段 | 
+                        ${formatSize(task.total_size || 0)} | 
+                        失败: ${task.failed || 0}
+                    </div>
+                    ` : ''}
+                    ${task.error ? `<div class="task-info" style="color:#ff4d4f">${task.error}</div>` : ''}
+                    <div style="margin-top: 10px;">
+                        ${task.status === 'pending' || task.status === 'downloading' ? 
+                            `<button class="btn-warning" onclick="cancelTask('${task.id}')">取消</button>` : ''}
+                        ${task.status === 'failed' || task.status === 'cancelled' ? 
+                            `<button class="btn-success" onclick="retryTask('${task.id}')">重试</button>` : ''}
+                        <button class="btn-danger" onclick="deleteTask('${task.id}')">删除</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function statusText(s) {
+            const m = {pending:'等待中',downloading:'下载中',completed:'已完成',failed:'失败',cancelled:'已取消'};
+            return m[s] || s;
+        }
+
+        function formatSize(bytes) {
+            if (bytes >= 1024*1024*1024) return (bytes/1024/1024/1024).toFixed(2) + ' GB';
+            if (bytes >= 1024*1024) return (bytes/1024/1024).toFixed(1) + ' MB';
+            if (bytes >= 1024) return (bytes/1024).toFixed(1) + ' KB';
+            return bytes + ' B';
+        }
+
+        document.getElementById('addTaskForm').onsubmit = async (e) => {
+            e.preventDefault();
+            await fetch('/api/tasks', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    m3u8_url: document.getElementById('m3u8Url').value,
+                    title: document.getElementById('title').value,
+                    output_dir: document.getElementById('outputDir').value
+                })
+            });
+            e.target.reset();
+            loadTasks();
+        };
+
+        async function retryTask(id) {
+            await fetch(`/api/tasks/${id}/retry`, {method: 'POST'});
+            loadTasks();
+        }
+
+        async function cancelTask(id) {
+            await fetch(`/api/tasks/${id}/cancel`, {method: 'POST'});
+            loadTasks();
+        }
+
+        async function deleteTask(id) {
+            if (!confirm('确定删除此任务？')) return;
+            await fetch(`/api/tasks/${id}`, {method: 'DELETE'});
+            loadTasks();
+        }
+
+        loadTasks();
+        setInterval(loadTasks, 3000);
+    </script>
+</body>
+</html>

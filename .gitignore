@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.log
+.DS_Store
+config/config.json
+config/tasks.json
+logs/
+test_*.py
+download_m3u8.py
+download_video.py
+fix_download.py
