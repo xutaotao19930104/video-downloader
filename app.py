@@ -3,8 +3,12 @@ import json
 import os
 import time
 import threading
+import logging
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
+logger = logging.getLogger(__name__)
 from hls_downloader import download_ts, format_size, format_time
 
 app = Flask(__name__)
@@ -134,12 +138,15 @@ def run_download(task):
         output_dir = Path(task["output_dir"])
         title = task["title"]
         
+        logger.info(f"开始下载: {title}, URL: {m3u8_url}")
+        
         output_dir.mkdir(parents=True, exist_ok=True)
         ts_dir = output_dir / "temp_ts"
         ts_dir.mkdir(exist_ok=True)
 
         # 获取 m3u8
         resp = requests.get(m3u8_url, timeout=30)
+        logger.info(f"m3u8 响应状态: {resp.status_code}")
         if "#EXT-X-STREAM-INF" in resp.text:
             for line in resp.text.strip().split("\n"):
                 line = line.strip()
@@ -152,6 +159,7 @@ def run_download(task):
                     if line.strip() and not line.startswith("#")]
 
         total = len(segments)
+        logger.info(f"共 {total} 个片段")
         start_time = time.time()
 
         def update_progress(downloaded, failed, total_size):
@@ -198,8 +206,11 @@ def run_download(task):
                     total_size += size
                 else:
                     failed += 1
+                    logger.warning(f"片段 {index} 下载失败: {status}")
 
                 update_progress(downloaded, failed, total_size)
+        
+        logger.info(f"下载完成: {downloaded} 成功, {failed} 失败, 总大小: {total_size/1024/1024:.1f}MB")
 
         # 合并
         ts_files = sorted(ts_dir.glob("seg_*.ts"))
@@ -230,6 +241,7 @@ def run_download(task):
                 break
 
     except Exception as e:
+        logger.error(f"下载失败: {e}")
         tasks_data = load_tasks()
         for t in tasks_data["tasks"]:
             if t["id"] == task_id:
