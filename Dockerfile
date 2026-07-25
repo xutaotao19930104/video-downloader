@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils &
     chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe && \
     rm -rf /tmp/ffmpeg* /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir flask requests
+RUN pip install --no-cache-dir flask requests cloudscraper
 
 WORKDIR /app
 
