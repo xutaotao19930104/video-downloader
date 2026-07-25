@@ -1,12 +1,19 @@
 FROM python:3.9-slim
 
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl && \
+    curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o /tmp/ffmpeg.tar.xz && \
+    tar -xf /tmp/ffmpeg.tar.xz -C /tmp && \
+    cp /tmp/ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/ && \
+    cp /tmp/ffmpeg-*-amd64-static/ffprobe /usr/local/bin/ && \
+    chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe && \
+    rm -rf /tmp/ffmpeg* /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir yt-dlp flask requests
+RUN pip install --no-cache-dir flask requests
 
 WORKDIR /app
 
 COPY app.py ./
+COPY hls_downloader.py ./
 COPY templates ./templates/
 
 RUN mkdir -p /data/config /data/downloads /data/logs
