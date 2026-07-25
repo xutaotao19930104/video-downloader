@@ -32,6 +32,44 @@ def save_tasks(data):
     with open(TASKS_FILE, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
+def extract_m3u8_from_page(page_url):
+    import requests
+    import re
+    import json
+    from urllib.parse import urljoin
+    
+    logger.info(f"尝试从页面提取 m3u8: {page_url}")
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": page_url
+    }
+    
+    resp = requests.get(page_url, headers=headers, timeout=30)
+    logger.info(f"页面响应状态: {resp.status_code}, 长度: {len(resp.text)}")
+    
+    # 方法1: var player_aaaa={...}
+    match = re.search(r'var\s+player_aaaa\s*=\s*(\{.*?\})\s*;', resp.text, re.DOTALL)
+    if match:
+        try:
+            player_data = json.loads(match.group(1))
+            m3u8_url = player_data.get("url", "")
+            if m3u8_url:
+                logger.info(f"从 player_aaaa 提取到 m3u8: {m3u8_url}")
+                return m3u8_url
+        except json.JSONDecodeError as e:
+            logger.warning(f"解析 player_aaaa 失败: {e}")
+    
+    # 方法2: 直接匹配 m3u8 URL
+    match = re.search(r'(https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*)', resp.text)
+    if match:
+        m3u8_url = match.group(1)
+        logger.info(f"从页面匹配到 m3u8: {m3u8_url}")
+        return m3u8_url
+    
+    raise Exception("无法从页面提取 m3u8 地址，页面可能有 Cloudflare 防护")
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -43,12 +81,12 @@ def get_tasks():
 @app.route("/api/tasks", methods=["POST"])
 def add_task():
     data = request.json
-    m3u8_url = data.get("m3u8_url")
+    input_url = data.get("m3u8_url")
     title = data.get("title", "video")
     output_dir = data.get("output_dir", "")
 
-    if not m3u8_url:
-        return jsonify({"error": "请提供 m3u8 地址"}), 400
+    if not input_url:
+        return jsonify({"error": "请提供视频链接或 m3u8 地址"}), 400
 
     tasks_data = load_tasks()
     existing_ids = [t["id"] for t in tasks_data["tasks"]]
@@ -59,7 +97,7 @@ def add_task():
 
     new_task = {
         "id": new_id,
-        "m3u8_url": m3u8_url,
+        "m3u8_url": input_url,
         "title": title,
         "output_dir": output_dir,
         "status": "pending",
@@ -138,14 +176,20 @@ def run_download(task):
         output_dir = Path(task["output_dir"])
         title = task["title"]
         
-        logger.info(f"开始下载: {title}, URL: {m3u8_url}")
+        logger.info(f"开始下载: {title}, 输入URL: {m3u8_url}")
+        
+        # 判断是否为页面URL还是m3u8链接
+        if not m3u8_url.endswith(".m3u8") and "m3u8" not in m3u8_url:
+            logger.info("检测到页面URL，尝试提取m3u8...")
+            m3u8_url = extract_m3u8_from_page(m3u8_url)
         
         output_dir.mkdir(parents=True, exist_ok=True)
         ts_dir = output_dir / "temp_ts"
         ts_dir.mkdir(exist_ok=True)
 
         # 获取 m3u8
-        resp = requests.get(m3u8_url, timeout=30)
+        import requests as req
+        resp = req.get(m3u8_url, timeout=30)
         logger.info(f"m3u8 响应状态: {resp.status_code}")
         if "#EXT-X-STREAM-INF" in resp.text:
             for line in resp.text.strip().split("\n"):
