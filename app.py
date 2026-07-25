@@ -33,19 +33,24 @@ def save_tasks(data):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 def extract_m3u8_from_page(page_url):
-    import requests
     import re
     import json
     from urllib.parse import urljoin
     
     logger.info(f"尝试从页面提取 m3u8: {page_url}")
     
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": page_url
-    }
+    try:
+        import cloudscraper
+        scraper = cloudscraper.create_scraper()
+        resp = scraper.get(page_url, timeout=30)
+    except ImportError:
+        import requests
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": page_url
+        }
+        resp = requests.get(page_url, headers=headers, timeout=30)
     
-    resp = requests.get(page_url, headers=headers, timeout=30)
     logger.info(f"页面响应状态: {resp.status_code}, 长度: {len(resp.text)}")
     
     # 方法1: var player_aaaa={...}
